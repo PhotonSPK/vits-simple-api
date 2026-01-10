@@ -77,6 +77,10 @@ def g2p(text, **kwargs):
 
 
 def _get_initials_finals(word):
+    # 忍不了了强行做一个特判
+    if word == '神乐':
+        return ['sh', 'l'], ['en2', 'e4']
+
     initials = []
     finals = []
     orig_initials = lazy_pinyin(
