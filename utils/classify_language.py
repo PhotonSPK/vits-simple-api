@@ -1,4 +1,5 @@
 import regex as re
+import yaml
 
 try:
     from config import config
@@ -20,7 +21,9 @@ langid_languages = ["af", "am", "an", "ar", "as", "az", "be", "bg", "bn", "br", 
                     "ur", "vi", "vo", "wa", "xh", "zh", "zu"]
 
 classifier = None
-
+custom_language_mapping = {}
+with open("data/language_mapping.yaml", "r", encoding="utf-8") as f:
+    custom_language_mapping = yaml.safe_load(f)['language_mapping']
 
 def init_classifier():
     global classifier
@@ -58,6 +61,9 @@ def set_languages(langs):
 
 def classify_language(text: str, target_languages: list = None) -> str:
     global classifier
+
+    if text in custom_language_mapping.keys():
+        return custom_language_mapping[text]
 
     if not target_languages:
         target_languages = None
