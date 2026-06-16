@@ -18,4 +18,4 @@ phrases_dict.txt
 /data/models/
 /vits/text/chinese_dialect_lexicons
 /data/polyphonic.yaml
-/data/language_mapping.yaml
+/data/language_mapping.json

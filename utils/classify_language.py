@@ -1,3 +1,7 @@
+from pathlib import Path
+from pathlib import Path
+import json
+
 import regex as re
 import yaml
 
@@ -5,7 +9,7 @@ try:
     from config import config
 
     module = config.language_identification.language_identification_library.lower()
-except:
+except (ImportError, AttributeError, KeyError):
     module = "langid"
 
 langid_languages = ["af", "am", "an", "ar", "as", "az", "be", "bg", "bn", "br", "bs", "ca", "cs", "cy", "da", "de",
@@ -20,10 +24,92 @@ langid_languages = ["af", "am", "an", "ar", "as", "az", "be", "bg", "bn", "br", 
                     "ug", "uk",
                     "ur", "vi", "vo", "wa", "xh", "zh", "zu"]
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+LANGUAGE_MAPPING_JSON_PATH = BASE_DIR / "data" / "language_mapping.json"
+LANGUAGE_MAPPING_YAML_PATH = BASE_DIR / "data" / "language_mapping.yaml"
+
 classifier = None
 custom_language_mapping = {}
-with open("data/language_mapping.yaml", "r", encoding="utf-8") as f:
-    custom_language_mapping = yaml.safe_load(f)['language_mapping']
+_custom_language_terms = ()
+_current_languages_signature = None
+
+
+def _load_custom_language_mapping() -> dict:
+    source_path = None
+    if LANGUAGE_MAPPING_JSON_PATH.exists():
+        source_path = LANGUAGE_MAPPING_JSON_PATH
+    elif LANGUAGE_MAPPING_YAML_PATH.exists():
+        source_path = LANGUAGE_MAPPING_YAML_PATH
+
+    if source_path is None:
+        return {}
+
+    with source_path.open("r", encoding="utf-8") as f:
+        if source_path.suffix == ".json":
+            data = json.load(f) or {}
+        else:
+            data = yaml.safe_load(f) or {}
+
+    mapping = data.get("language_mapping", {})
+    if not isinstance(mapping, dict):
+        return {}
+
+    return {
+        str(key).strip(): str(value).strip().lower()
+        for key, value in mapping.items()
+        if str(key).strip() and str(value).strip()
+    }
+
+
+def _build_custom_language_terms(mapping: dict) -> tuple:
+    # Longer terms first so more specific phrases win when phrases overlap.
+    return tuple(sorted(mapping.keys(), key=len, reverse=True))
+
+
+def _term_in_text(term: str, text: str) -> bool:
+    if term.isascii() and term.replace("_", "").replace("-", "").isalnum():
+        pattern = rf"(?<!\w){re.escape(term)}(?!\w)"
+        return re.search(pattern, text) is not None
+
+    return term in text
+
+
+custom_language_mapping = _load_custom_language_mapping()
+_custom_language_terms = _build_custom_language_terms(custom_language_mapping)
+
+
+def _sync_custom_language_mapping(mapping: dict):
+    global custom_language_mapping, _custom_language_terms
+
+    custom_language_mapping = {
+        str(key).strip(): str(value).strip().lower()
+        for key, value in mapping.items()
+        if str(key).strip() and str(value).strip()
+    }
+    _custom_language_terms = _build_custom_language_terms(custom_language_mapping)
+
+
+def get_custom_language_mapping() -> dict:
+    return dict(custom_language_mapping)
+
+
+def set_custom_language_mapping(mapping: dict):
+    LANGUAGE_MAPPING_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
+    normalized_mapping = {
+        str(key).strip(): str(value).strip().lower()
+        for key, value in mapping.items()
+        if str(key).strip() and str(value).strip()
+    }
+
+    with LANGUAGE_MAPPING_JSON_PATH.open("w", encoding="utf-8") as f:
+        json.dump({"language_mapping": normalized_mapping}, f, ensure_ascii=False, indent=2)
+
+    _sync_custom_language_mapping(normalized_mapping)
+
+
+def reload_custom_language_mapping():
+    _sync_custom_language_mapping(_load_custom_language_mapping())
+
 
 def init_classifier():
     global classifier
@@ -38,39 +124,79 @@ def init_classifier():
         classifier = langid.classify
 
 
+def _supported_languages():
+    if module == "fastlid" or module == "fasttext":
+        from fastlid import supported_langs
+
+        return supported_langs
+
+    if module == "langid":
+        return langid_languages
+
+    raise ValueError("Wrong LANGUAGE_IDENTIFICATION_LIBRARY in config.yaml")
+
+
+def _resolve_target_languages(langs):
+    if not langs:
+        return None
+
+    supported_languages = set(_supported_languages())
+    return tuple(dict.fromkeys(lang for lang in langs if lang in supported_languages))
+
+
+def _apply_target_languages(langs):
+    global _current_languages_signature
+
+    if module == "fastlid" or module == "fasttext":
+        from fastlid import fastlid
+
+        target_languages = list(langs) if langs else list(_supported_languages())
+        signature = tuple(target_languages)
+        if signature == _current_languages_signature:
+            return
+
+        fastlid.set_languages = target_languages
+        _current_languages_signature = signature
+        return
+
+    if module == "langid":
+        import langid
+
+        target_languages = list(langs) if langs else list(_supported_languages())
+        signature = tuple(target_languages)
+        if signature == _current_languages_signature:
+            return
+
+        langid.set_languages(target_languages)
+        _current_languages_signature = signature
+        return
+
+    raise ValueError("Wrong LANGUAGE_IDENTIFICATION_LIBRARY in config.yaml")
+
+
 init_classifier()
 
 
 def set_languages(langs):
-    global classifier
-
-    if langs is None:
-        return
-
-    if module == "fastlid" or module == "fasttext":
-        from fastlid import fastlid, supported_langs
-        target_languages = [lang for lang in langs if lang in supported_langs]
-        fastlid.set_languages = target_languages
-    elif module == "langid":
-        import langid
-        target_languages = [lang for lang in langs if lang in langid_languages]
-        langid.set_languages(target_languages)
-    else:
-        raise ValueError(f"Wrong LANGUAGE_IDENTIFICATION_LIBRARY in config.yaml")
+    _apply_target_languages(_resolve_target_languages(langs))
 
 
 def classify_language(text: str, target_languages: list = None) -> str:
     global classifier
 
-    if text in custom_language_mapping.keys():
-        return custom_language_mapping[text]
+    normalized_text = text.strip()
 
-    if not target_languages:
-        target_languages = None
+    if normalized_text in custom_language_mapping:
+        return custom_language_mapping[normalized_text]
 
-    set_languages(target_languages)
+    for term in _custom_language_terms:
+        if _term_in_text(term, normalized_text):
+            return custom_language_mapping[term]
 
-    lang = classifier(text)[0]
+    resolved_languages = _resolve_target_languages(target_languages)
+    _apply_target_languages(resolved_languages)
+
+    lang = classifier(normalized_text)[0]
 
     return lang
 

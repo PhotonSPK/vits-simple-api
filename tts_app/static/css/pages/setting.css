@@ -9,6 +9,10 @@
     margin: 20px;
 }
 
+.config-tabs {
+    margin: 20px 20px 0;
+}
+
 .config-wrapper {
     padding: 20px;
     margin-bottom: 20px;
@@ -50,6 +54,25 @@
     background-color: #673ab7;
 }
 
+.custom-language-input {
+    min-width: 220px;
+}
+
+.language-mapping-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.language-mapping-row .language-term,
+.language-mapping-row .language-lang {
+    flex: 1;
+}
+
+.language-mapping-row .language-remove {
+    flex: 0 0 auto;
+}
 
 
 

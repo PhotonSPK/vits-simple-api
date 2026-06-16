@@ -1,59 +1,74 @@
-var configData = {}
+var configData = {};
+var languageMappingData = {};
 
 $(document).ready(function () {
-        $.ajax({
-            url: '/admin/get_config',
-            type: 'POST',
-            dataType: 'json',
-            contentType: 'application/json',
-            headers: {
-                'X-CSRFToken': $('meta[name="csrf-token"]').attr('content')
-            },
-            success: function (response) {
-                configData = response;
-                show_config(response);
-            },
-            error: function (response) {
+    $.ajax({
+        url: '/admin/get_config',
+        type: 'GET',
+        dataType: 'json',
+        contentType: 'application/json',
+        headers: {
+            'X-CSRFToken': $('meta[name="csrf-token"]').attr('content')
+        },
+        success: function (response) {
+            configData = response;
+            languageMappingData = response.language_mapping || {};
+            show_config();
+            render_language_mapping_list(languageMappingData);
+        },
+        error: function () {
+            alert("加载配置失败！");
+        }
+    });
 
-            }
+    $(".config-save").click(function () {
+        set_config();
+    });
+
+    $("#add-language-mapping").click(function () {
+        add_language_mapping_from_inputs();
+    });
+
+    $("#save-language-mapping").click(function () {
+        save_language_mapping();
+    });
+
+    $("#language-mapping-list").on("click", ".language-remove", function () {
+        $(this).closest(".language-mapping-row").remove();
+    });
+
+    // Add new API key
+    $('#add-api-key').click(function () {
+        var newKey = {
+            key: generateRandomKey(),
+            enabled: true
+        };
+        configData.system.api_keys.push(newKey);
+        addApiKeyHtml(newKey, configData.system.api_keys.length - 1);
+    });
+
+    // Remove API key
+    $('#api-keys').on('click', '.btn-remove-key', function () {
+        var index = $(this).closest('.input-group').data('index');
+        configData.system.api_keys.splice(index, 1);
+
+        $(this).closest('.input-group').remove();
+
+        $('#api-keys .input-group').each(function (i) {
+            $(this).attr('data-index', i);
+            $(this).find('.input-group-text').text(`API Key ${i + 1}`);
         });
-        $(".config-save").click(function () {
-            set_config();
-        });
+    });
 
-        // Add new API key
-        $('#add-api-key').click(function () {
-            var newKey = {
-                key: generateRandomKey(),
-                enabled: true
-            };
-            configData.system.api_keys.push(newKey);
-            addApiKeyHtml(newKey, configData.system.api_keys.length - 1);
-        });
-
-        // Remove API key
-        $('#api-keys').on('click', '.btn-remove-key', function () {
-            var index = $(this).closest('.input-group').data('index');
-            configData.system.api_keys.splice(index, 1);
-
-            $(this).closest('.input-group').remove();
-
-            $('#api-keys .input-group').each(function (i) {
-                $(this).attr('data-index', i);
-                $(this).find('.input-group-text').text(`API Key ${i + 1}`);
-            });
-        });
-
-        // Toggle API Key Enabled status
-        $('#api-key-enabled').change(function () {
-            configData.system.api_key_enabled = $(this).prop('checked');
-        });
-    }
-);
+    // Toggle API Key Enabled status
+    $('#api-key-enabled').change(function () {
+        configData.system.api_key_enabled = $(this).prop('checked');
+    });
+});
 
 function renderApiKeys() {
     var container = $('#api-keys');
-    container.empty(); // Clear previous keys
+    container.empty();
 
     configData.system.api_keys.forEach(function (apiKey, index) {
         addApiKeyHtml(apiKey, index);
@@ -89,9 +104,15 @@ function generateRandomKey() {
 }
 
 function show_config() {
+    $('#vits-config').empty();
+    $('#w2v2-vits-config').empty();
+    $('#hubert-vits-config').empty();
+    $('#bert-vits2-config').empty();
+    $('#log-config').find('.item:not(:first)').remove();
+    $('#tts-model-config').empty();
+
     $.each(configData.vits_config, function (key, value) {
         var formattedKey = key.replace(/_/g, '-');
-        //为了避免id冲突，组合key作为id
         var itemId = 'vits-config-' + formattedKey;
         $('#vits-config').append(`
         <div class="input-group mb-3 item">
@@ -99,7 +120,7 @@ function show_config() {
             <input type="text" class="form-control" id="${itemId}" value="${value}">
         </div>
         `);
-    })
+    });
 
     $.each(configData.w2v2_vits_config, function (key, value) {
         var formattedKey = key.replace(/_/g, '-');
@@ -110,7 +131,7 @@ function show_config() {
             <input type="text" class="form-control" id="${itemId}" value="${value}">
         </div>
         `);
-    })
+    });
 
     $.each(configData.hubert_vits_config, function (key, value) {
         var formattedKey = key.replace(/_/g, '-');
@@ -121,7 +142,7 @@ function show_config() {
             <input type="text" class="form-control" id="${itemId}" value="${value}">
         </div>
         `);
-    })
+    });
 
     $.each(configData.bert_vits2_config, function (key, value) {
         var formattedKey = key.replace(/_/g, '-');
@@ -133,11 +154,10 @@ function show_config() {
             <input type="text" class="form-control" id="${itemId}" value="${inputValue}">
         </div>
         `);
-    })
+    });
 
     $.each(configData.log_config, function (key, value) {
         var formattedKey = key.replace(/_/g, '-');
-
         if (key != 'logging_level') {
             $('#log-config').append(`
             <div class="input-group mb-3 item">
@@ -146,12 +166,10 @@ function show_config() {
             </div>
             `);
         }
-
     });
 
     $.each(configData.tts_model_config, function (key, value) {
         var formattedKey = key.replace(/_/g, '-');
-
         if (formattedKey !== "tts-models") {
             $('#tts-model-config').append(`
         <div class="input-group mb-3 item">
@@ -164,7 +182,7 @@ function show_config() {
 
     $.each(configData.language_identification, function (key, value) {
         var formattedKey = key.replace(/_/g, '-');
-        $('#language-identification ' + '#' + formattedKey).val(value)
+        $('#language-identification ' + '#' + formattedKey).val(value);
     });
 
     $.each(configData.http_service, function (key, value) {
@@ -176,8 +194,7 @@ function show_config() {
         }
     });
 
-    // api keys
-    renderApiKeys(configData);
+    renderApiKeys();
 
     $.each(configData.system, function (key, value) {
         var formattedKey = key.replace(/_/g, '-');
@@ -191,8 +208,6 @@ function show_config() {
     $.each(configData.admin, function (key, value) {
         $('#' + key).val(value);
     });
-
-
 }
 
 function set_config() {
@@ -200,29 +215,26 @@ function set_config() {
 
     $('.configuration .form-label').each(function () {
         var labelId = $(this).next().attr('id');
-        var nestedDict = {};
+        if (!labelId) {
+            return;
+        }
 
+        var nestedDict = {};
 
         $('#' + labelId).find('.item').each(function () {
             var itemId = $(this).find('input, select').attr('id').replace(/-/g, '_');
-
-            // 还原组合 key
             itemId = itemId.replace(labelId.replace(/-/g, '_') + "_", "");
 
             var itemValue;
             if ($(this).find('input').is(':checkbox')) {
-                // 如果是复选框，获取复选框的状态
                 itemValue = $(this).find('input').prop('checked');
             } else {
-                // 如果不是复选框，获取输入框或选择框的值
                 itemValue = $(this).find('input, select').val();
 
-                // 将空字符串转换为 null
                 if (itemValue === "") {
                     itemValue = null;
                 }
 
-                // 特殊处理 language_automatic_detect 字段
                 if (itemId === "language_automatic_detect") {
                     itemValue = itemValue ? itemValue.split(" ") : [];
                 }
@@ -230,7 +242,6 @@ function set_config() {
             nestedDict[itemId] = itemValue;
         });
 
-        // 处理 system 配置中的 api_keys 信息
         if (labelId === "system") {
             nestedDict['api_keys'] = [];
             $('#api-keys .input-group').each(function () {
@@ -249,19 +260,98 @@ function set_config() {
     $.ajax({
         type: "POST",
         url: "/admin/set_config",
-        data: JSON.stringify(configData), // 将配置数据转换为JSON字符串
+        data: JSON.stringify(configData),
         contentType: "application/json",
         headers: {
             'X-CSRFToken': $('meta[name="csrf-token"]').attr('content')
         },
-        success: function (response) {
-            alert("配置已保存");
-            // location.reload();
+        success: function () {
+            alert("主配置已保存");
         },
-        error: function (error) {
-            alert("保存配置时出错，请查看日志！");
+        error: function () {
+            alert("保存主配置时出错，请查看日志！");
         }
     });
 
-    return configData
+    return configData;
+}
+
+function render_language_mapping_list(mapping) {
+    var container = $("#language-mapping-list");
+    container.empty();
+
+    var entries = Object.entries(mapping || {});
+    if (entries.length === 0) {
+        container.append('<div class="text-muted">暂无自定义词条</div>');
+        return;
+    }
+
+    entries.forEach(function (entry) {
+        container.append(create_language_mapping_row(entry[0], entry[1]));
+    });
+}
+
+function create_language_mapping_row(term, lang) {
+    var row = $(`
+        <div class="language-mapping-row">
+            <input type="text" class="form-control language-term" placeholder="自定义词条">
+            <input type="text" class="form-control language-lang" placeholder="语言标签">
+            <button type="button" class="btn btn-outline-danger language-remove">删除</button>
+        </div>
+    `);
+
+    row.find(".language-term").val(term || "");
+    row.find(".language-lang").val(lang || "");
+    return row;
+}
+
+function add_language_mapping_from_inputs() {
+    var term = $("#language-mapping-term").val().trim();
+    var lang = $("#language-mapping-lang").val().trim().toLowerCase();
+
+    if (!term || !lang) {
+        alert("请先填写词条和语言标签。");
+        return;
+    }
+
+    $("#language-mapping-list .text-muted").remove();
+    $("#language-mapping-list").append(create_language_mapping_row(term, lang));
+    $("#language-mapping-term").val("");
+    $("#language-mapping-lang").val("");
+}
+
+function collect_language_mapping() {
+    var mapping = {};
+
+    $("#language-mapping-list .language-mapping-row").each(function () {
+        var term = $(this).find(".language-term").val().trim();
+        var lang = $(this).find(".language-lang").val().trim().toLowerCase();
+
+        if (term && lang) {
+            mapping[term] = lang;
+        }
+    });
+
+    return mapping;
+}
+
+function save_language_mapping() {
+    var mapping = collect_language_mapping();
+
+    $.ajax({
+        type: "POST",
+        url: "/admin/set_language_mapping",
+        data: JSON.stringify({ language_mapping: mapping }),
+        contentType: "application/json",
+        headers: {
+            'X-CSRFToken': $('meta[name="csrf-token"]').attr('content')
+        },
+        success: function () {
+            languageMappingData = mapping;
+            alert("自定义词条已保存");
+        },
+        error: function () {
+            alert("保存自定义词条失败，请查看日志！");
+        }
+    });
 }

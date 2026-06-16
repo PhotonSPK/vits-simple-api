@@ -8,6 +8,7 @@ from flask_login import login_required
 from config import config, BASE_DIR, save_config_to_yaml
 from contants import ModelType
 from tts_app.model_manager import model_manager
+from utils.classify_language import get_custom_language_mapping, set_custom_language_mapping
 
 admin = Blueprint('admin', __name__)
 
@@ -157,8 +158,9 @@ def get_path():
 @admin.route('/get_config', methods=["GET", "POST"])
 @login_required
 def get_config():
-
-    return jsonify(config.model_dump())
+    response = config.model_dump()
+    response["language_mapping"] = get_custom_language_mapping()
+    return jsonify(response)
 
 
 @admin.route('/set_config', methods=["GET", "POST"])
@@ -178,6 +180,28 @@ def set_config():
     status = "success"
     code = 200
     return make_response(jsonify({"status": status}), code)
+
+
+@admin.route('/get_language_mapping', methods=["GET"])
+@login_required
+def get_language_mapping():
+    return jsonify({"language_mapping": get_custom_language_mapping()})
+
+
+@admin.route('/set_language_mapping', methods=["POST"])
+@login_required
+def set_language_mapping():
+    if request.headers.get('Content-Type') == 'application/json':
+        request_data = request.get_json() or {}
+    else:
+        request_data = request.form.to_dict()
+
+    language_mapping = request_data.get("language_mapping", {})
+    if not isinstance(language_mapping, dict):
+        return make_response(jsonify({"status": "failed", "message": "language_mapping must be an object"}), 400)
+
+    set_custom_language_mapping(language_mapping)
+    return make_response(jsonify({"status": "success"}), 200)
 
 
 @admin.route('/save_current_model', methods=["GET", "POST"])
