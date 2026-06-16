@@ -16,6 +16,7 @@ from config import config, BASE_DIR
 from logger import logger
 from manager.observer import Observer
 from utils.data_utils import check_is_none
+from utils.homophone_mapping import apply_homophone_mapping
 from utils.sentence import sentence_split_and_markup, sentence_split, sentence_split_reading
 
 
@@ -269,6 +270,13 @@ class TTSManager(Observer):
         encoded_audio = self.encode(target_sr, audio, format)
         return encoded_audio
 
+    def _preprocess_text(self, text):
+        if text is None:
+            return None
+
+        normalized_text = re.sub(r'\s+', ' ', text).strip()
+        return apply_homophone_mapping(normalized_text)
+
     def vits_infer(self, state, encode=True):
         model = self.get_model(ModelType.VITS, state["id"])
         if model.dynamic_loading:
@@ -276,7 +284,7 @@ class TTSManager(Observer):
         state["id"] = self.get_real_id(ModelType.VITS, state["id"])  # Change to real id
         # 去除所有多余的空白字符
         if state["text"] is not None:
-            state["text"] = re.sub(r'\s+', ' ', state["text"]).strip()
+            state["text"] = self._preprocess_text(state["text"])
         sampling_rate = model.sampling_rate
 
         sentences_list = sentence_split_and_markup(
@@ -309,7 +317,7 @@ class TTSManager(Observer):
 
         # 去除所有多余的空白字符
         if state["text"] is not None:
-            state["text"] = re.sub(r'\s+', ' ', state["text"]).strip()
+            state["text"] = self._preprocess_text(state["text"])
         sampling_rate = model.sampling_rate
 
         sentences_list = sentence_split_and_markup(state["text"], state["lang"], state["segment_size"])
@@ -345,7 +353,7 @@ class TTSManager(Observer):
         state["id"] = self.get_real_id(ModelType.W2V2_VITS, state["id"])
         # 去除所有多余的空白字符
         if state["text"] is not None:
-            state["text"] = re.sub(r'\s+', ' ', state["text"]).strip()
+            state["text"] = self._preprocess_text(state["text"])
         emotion = state["emotion_reference"] if state["emotion_reference"] is not None else state["emotion"]
 
         sampling_rate = model.sampling_rate
@@ -404,7 +412,7 @@ class TTSManager(Observer):
 
         # 去除所有多余的空白字符
         if state["text"] is not None:
-            state["text"] = re.sub(r'\s+', ' ', state["text"]).strip()
+            state["text"] = self._preprocess_text(state["text"])
         sampling_rate = model.sampling_rate
         sentences_list = sentence_split(state["text"], state["segment_size"])
 
@@ -435,7 +443,7 @@ class TTSManager(Observer):
 
         # 去除所有多余的空白字符
         if state["text"] is not None:
-            state["text"] = re.sub(r'\s+', ' ', state["text"]).strip()
+            state["text"] = self._preprocess_text(state["text"])
         sampling_rate = model.sampling_rate
         sentences_list = sentence_split(state["text"], state["segment_size"])
 
@@ -487,6 +495,9 @@ class TTSManager(Observer):
     def gpt_sovits_infer(self, state, encode=True):
         model = self.get_model(ModelType.GPT_SOVITS, state["id"])
 
+        if state["text"] is not None:
+            state["text"] = self._preprocess_text(state["text"])
+
         state = self._set_reference_audio(state)
 
         audio = next(model.infer(**state))
@@ -496,6 +507,9 @@ class TTSManager(Observer):
 
     def stream_gpt_sovits_infer(self, state, encode=True):
         model = self.get_model(ModelType.GPT_SOVITS, state["id"])
+
+        if state["text"] is not None:
+            state["text"] = self._preprocess_text(state["text"])
 
         state = self._set_reference_audio(state)
 

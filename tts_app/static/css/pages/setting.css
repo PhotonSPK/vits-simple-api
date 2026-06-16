@@ -66,11 +66,15 @@
 }
 
 .language-mapping-row .language-term,
-.language-mapping-row .language-lang {
+.language-mapping-row .language-lang,
+.language-mapping-row .polyphonic-word,
+.language-mapping-row .polyphonic-pinyin {
     flex: 1;
 }
 
-.language-mapping-row .language-remove {
+.language-mapping-row .language-remove,
+.language-mapping-row .homophone-remove,
+.language-mapping-row .polyphonic-remove {
     flex: 0 0 auto;
 }
 

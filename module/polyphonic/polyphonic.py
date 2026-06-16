@@ -99,6 +99,12 @@ def get_polyphonic_dict():
     return corrector.polyphonic_dict
 
 
+def get_polyphonic_words():
+    if corrector is None:
+        load_polyphonic()
+    return dict(corrector.polyphonic_words)
+
+
 def correct_pronunciation(word, pinyin, style=1):
     if corrector is None:
         load_polyphonic()
@@ -133,3 +139,36 @@ def update_polyphonic():
     if corrector is None:
         load_polyphonic()
     corrector.update_polyphonic()
+
+
+def set_polyphonic_words(polyphonic_words: dict):
+    if corrector is None:
+        load_polyphonic()
+
+    if not isinstance(polyphonic_words, dict):
+        return False, "polyphonic_mapping must be an object"
+
+    normalized_mapping = {}
+    for raw_word, raw_pinyin in polyphonic_words.items():
+        word = str(raw_word).strip()
+        if not word:
+            continue
+
+        if not isinstance(raw_pinyin, list):
+            return False, f"pinyin for '{word}' must be an array"
+
+        pinyin = [str(item).strip() for item in raw_pinyin if str(item).strip()]
+        if not pinyin:
+            return False, f"pinyin for '{word}' is empty"
+
+        if len(word) != len(pinyin):
+            return False, f"word '{word}' and pinyin length mismatch"
+
+        normalized_mapping[word] = pinyin
+
+    corrector.polyphonic_dict["polyphonic"] = normalized_mapping
+    corrector.polyphonic_words = normalized_mapping
+    corrector.save_polyphonic()
+    corrector.update_polyphonic()
+
+    return True, "success"

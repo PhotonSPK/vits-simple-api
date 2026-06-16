@@ -7,8 +7,10 @@ from flask_login import login_required
 
 from config import config, BASE_DIR, save_config_to_yaml
 from contants import ModelType
+from module.polyphonic import get_polyphonic_words, set_polyphonic_words
 from tts_app.model_manager import model_manager
 from utils.classify_language import get_custom_language_mapping, set_custom_language_mapping
+from utils.homophone_mapping import get_custom_homophone_mapping, set_custom_homophone_mapping
 
 admin = Blueprint('admin', __name__)
 
@@ -160,6 +162,8 @@ def get_path():
 def get_config():
     response = config.model_dump()
     response["language_mapping"] = get_custom_language_mapping()
+    response["homophone_mapping"] = get_custom_homophone_mapping()
+    response["polyphonic_mapping"] = get_polyphonic_words()
     return jsonify(response)
 
 
@@ -201,6 +205,51 @@ def set_language_mapping():
         return make_response(jsonify({"status": "failed", "message": "language_mapping must be an object"}), 400)
 
     set_custom_language_mapping(language_mapping)
+    return make_response(jsonify({"status": "success"}), 200)
+
+
+@admin.route('/get_homophone_mapping', methods=["GET"])
+@login_required
+def get_homophone_mapping():
+    return jsonify({"homophone_mapping": get_custom_homophone_mapping()})
+
+
+@admin.route('/set_homophone_mapping', methods=["POST"])
+@login_required
+def set_homophone_mapping():
+    if request.headers.get('Content-Type') == 'application/json':
+        request_data = request.get_json() or {}
+    else:
+        request_data = request.form.to_dict()
+
+    homophone_mapping = request_data.get("homophone_mapping", {})
+    if not isinstance(homophone_mapping, dict):
+        return make_response(jsonify({"status": "failed", "message": "homophone_mapping must be an object"}),
+                             400)
+
+    set_custom_homophone_mapping(homophone_mapping)
+    return make_response(jsonify({"status": "success"}), 200)
+
+
+@admin.route('/get_polyphonic_mapping', methods=["GET"])
+@login_required
+def get_polyphonic_mapping():
+    return jsonify({"polyphonic_mapping": get_polyphonic_words()})
+
+
+@admin.route('/set_polyphonic_mapping', methods=["POST"])
+@login_required
+def set_polyphonic_mapping():
+    if request.headers.get('Content-Type') == 'application/json':
+        request_data = request.get_json() or {}
+    else:
+        request_data = request.form.to_dict()
+
+    polyphonic_mapping = request_data.get("polyphonic_mapping", {})
+    success, message = set_polyphonic_words(polyphonic_mapping)
+    if not success:
+        return make_response(jsonify({"status": "failed", "message": message}), 400)
+
     return make_response(jsonify({"status": "success"}), 200)
 
 
