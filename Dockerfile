@@ -59,25 +59,62 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 
 RUN apt-get update && \
-    apt-get install -yq build-essential espeak-ng cmake wget ca-certificates tzdata&& \
+    apt-get install -yq \
+    build-essential \
+    cmake \
+    wget \
+    ca-certificates \
+    tzdata \
+    autoconf \
+    automake \
+    libtool \
+    pkg-config \
+    gettext && \
     update-ca-certificates && \
     apt-get clean && \
     apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false && \
     rm -rf /var/lib/apt/lists/* 
 
+ENV ESPEAK_NG_VERSION=1.52.0
 
-# Install jemalloc
-RUN wget https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2 && \
-    tar -xvf jemalloc-5.3.0.tar.bz2 && \
-    cd jemalloc-5.3.0 && \
-    ./configure && \
+# Build and install espeak-ng from source.
+RUN wget -O /tmp/espeak-ng.tar.gz https://github.com/espeak-ng/espeak-ng/archive/refs/tags/${ESPEAK_NG_VERSION}.tar.gz && \
+    tar -xzf /tmp/espeak-ng.tar.gz -C /tmp && \
+    cd /tmp/espeak-ng-${ESPEAK_NG_VERSION} && \
+    ./autogen.sh && \
+    ./configure --prefix=/usr/local && \
     make -j$(nproc) && \
     make install && \
-    cd .. && \
-    rm -rf jemalloc-5.3.0* && \
-    ldconfig
+    ldconfig && \
+    rm -rf /tmp/espeak-ng.tar.gz /tmp/espeak-ng-${ESPEAK_NG_VERSION}
 
-ENV LD_PRELOAD=/usr/local/lib/libjemalloc.so
+
+# Link espeak-ng to a fixed path for runtime library detection.
+RUN ESPEAK_PATH=$(ldconfig -p | awk '/libespeak-ng.so.1/{print $NF; exit}') && \
+    test -n "$ESPEAK_PATH" && \
+    ln -sf "$ESPEAK_PATH" /usr/local/lib/libespeak-ng.so.1 && \
+    ln -sf "$ESPEAK_PATH" /usr/local/lib/libespeak-ng.so
+
+
+ENV MIMALLOC_VERSION=2.1.7
+
+# Build and install mimalloc from source.
+RUN wget -O /tmp/mimalloc.tar.gz https://github.com/microsoft/mimalloc/archive/refs/tags/v${MIMALLOC_VERSION}.tar.gz && \
+    tar -xzf /tmp/mimalloc.tar.gz -C /tmp && \
+    cd /tmp/mimalloc-${MIMALLOC_VERSION} && \
+    cmake -S . -B build -DMI_BUILD_SHARED=ON -DMI_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build build -j$(nproc) && \
+    cmake --install build && \
+    ldconfig && \
+    rm -rf /tmp/mimalloc.tar.gz /tmp/mimalloc-${MIMALLOC_VERSION}
+
+
+# Link mimalloc to a fixed path for LD_PRELOAD across architectures.
+RUN MIMALLOC_PATH=$(ldconfig -p | awk '/libmimalloc.so.2/{print $NF; exit}') && \
+    test -n "$MIMALLOC_PATH" && \
+    ln -sf "$MIMALLOC_PATH" /usr/local/lib/libmimalloc.so
+
+ENV LD_PRELOAD=/usr/local/lib/libmimalloc.so
 
 COPY requirements.txt /app/
 RUN pip install gunicorn --no-cache-dir && \

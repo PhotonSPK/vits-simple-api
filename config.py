@@ -295,15 +295,9 @@ def _default_espeak_library() -> str:
     if "win" in sys.platform:
         return r"C:/Program Files/eSpeak NG/libespeak-ng.dll"
 
-    candidate_paths = [
-        "/usr/local/lib/libespeak-ng.so.1",
-        "/usr/lib/x86_64-linux-gnu/libespeak-ng.so.1",
-        "/usr/lib/aarch64-linux-gnu/libespeak-ng.so.1",
-        "/usr/lib/libespeak-ng.so.1",
-    ]
-    for candidate_path in candidate_paths:
-        if os.path.exists(candidate_path):
-            return candidate_path
+    fixed_path = "/usr/local/lib/libespeak-ng.so.1"
+    if os.path.exists(fixed_path):
+        return fixed_path
     return ""
 
 
