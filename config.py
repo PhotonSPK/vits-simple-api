@@ -291,9 +291,25 @@ class System(BaseModel):
     data_path: str = "data"
 
 
+def _default_espeak_library() -> str:
+    if "win" in sys.platform:
+        return r"C:/Program Files/eSpeak NG/libespeak-ng.dll"
+
+    candidate_paths = [
+        "/usr/local/lib/libespeak-ng.so.1",
+        "/usr/lib/x86_64-linux-gnu/libespeak-ng.so.1",
+        "/usr/lib/aarch64-linux-gnu/libespeak-ng.so.1",
+        "/usr/lib/libespeak-ng.so.1",
+    ]
+    for candidate_path in candidate_paths:
+        if os.path.exists(candidate_path):
+            return candidate_path
+    return ""
+
+
 class LanguageIdentification(BaseModel):
     language_identification_library: str = "langid"
-    espeak_library: Optional[str] = r"C:/Program Files/eSpeak NG/libespeak-ng.dll" if "win" in sys.platform else ""
+    espeak_library: Optional[str] = Field(default_factory=_default_espeak_library)
     language_automatic_detect: List[str] = Field(default_factory=list)
     split_pattern: str = r'[\!\"\#\$\%\&\'\(\)\*\+\,\-\.\/\:\;\<\>\=\?\@\[\]\{\}\\\\\^\_\`' \
                          r'\！？。＂＃＄％＆＇（）＊＋，－／：；＜＝＞＠［＼］＾＿｀｛｜｝～｟｠｢｣､、〃》「」' \
