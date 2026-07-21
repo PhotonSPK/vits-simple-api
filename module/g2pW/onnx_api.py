@@ -82,7 +82,7 @@ class G2PWOnnxConverter:
             self.session_g2pw = onnxruntime.InferenceSession(
                 os.path.join(model_dir, "g2pW.onnx"),
                 sess_options=sess_options,
-                providers=["CUDAExecutionProvider"],
+                providers=["OpenVINOExecutionProvider", "CPUExecutionProvider"],
             )
         except:
             self.session_g2pw = onnxruntime.InferenceSession(
