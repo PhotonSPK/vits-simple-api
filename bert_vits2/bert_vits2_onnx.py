@@ -545,7 +545,6 @@ def infer(
         text, language, style_text, style_weight
     )
 
-    # 情感
     emo = None
     emotion_embedding = self.syn_meta.get("emotion_embedding", None) or getattr(
         self.hps_ms.model, "emotion_embedding", None
@@ -555,6 +554,88 @@ def infer(
         emo = self._get_emo(reference_audio, emotion)
     elif emotion_embedding == 2:
         emo = self._get_clap(reference_audio, text_prompt)
+
+    return self._infer(
+        id, phones, tones, lang_ids, zh_bert, ja_bert, en_bert,
+        sdp_ratio, noise, noisew, length, emo
+    )
+
+
+def infer_multilang(
+    self: BertVITS2ONNX,
+    text: str,
+    id: int,
+    lang: List[str],
+    sdp_ratio: float,
+    noise: float,
+    noisew: float,
+    length: float,
+    reference_audio=None,
+    emotion=None,
+    text_prompt=None,
+    style_text=None,
+    style_weight=0.7,
+    **kwargs,
+) -> np.ndarray:
+    """多语言混合推理（与 Bert_VITS2.infer_multilang() 相同接口）"""
+    from utils.sentence import split_languages
+
+    target_languages = lang
+    if len(lang) == 1 and lang[0] == "auto":
+        target_languages = self.lang
+
+    sentences_list = split_languages(
+        text, target_languages=target_languages,
+        expand_abbreviations=True, expand_hyphens=True
+    )
+
+    emo = None
+    emotion_embedding = self.syn_meta.get("emotion_embedding", None) or getattr(
+        self.hps_ms.model, "emotion_embedding", None
+    )
+    if emotion_embedding == 1:
+        emo = self._get_emo(reference_audio, emotion)
+    elif emotion_embedding == 2:
+        emo = self._get_clap(reference_audio, text_prompt)
+
+    phones_list, tones_list, lang_ids_list = [], [], []
+    zh_bert_list, ja_bert_list, en_bert_list = [], [], []
+
+    for idx, (_text, _lang) in enumerate(sentences_list):
+        skip_start = idx != 0
+        skip_end = idx != len(sentences_list) - 1
+        _zh_bert, _ja_bert, _en_bert, _phones, _tones, _lang_ids = self.get_text(
+            _text, _lang, style_text, style_weight
+        )
+
+        if skip_start:
+            _phones = _phones[3:]
+            _tones = _tones[3:]
+            _lang_ids = _lang_ids[3:]
+            _zh_bert = _zh_bert[:, 3:]
+            _ja_bert = _ja_bert[:, 3:]
+            _en_bert = _en_bert[:, 3:]
+        if skip_end:
+            _phones = _phones[:-2]
+            _tones = _tones[:-2]
+            _lang_ids = _lang_ids[:-2]
+            _zh_bert = _zh_bert[:, :-2]
+            _ja_bert = _ja_bert[:, :-2]
+            _en_bert = _en_bert[:, :-2]
+
+        phones_list.append(_phones)
+        tones_list.append(_tones)
+        lang_ids_list.append(_lang_ids)
+        zh_bert_list.append(_zh_bert)
+        ja_bert_list.append(_ja_bert)
+        en_bert_list.append(_en_bert)
+
+    zh_bert = torch.cat(zh_bert_list, dim=1)
+    ja_bert = torch.cat(ja_bert_list, dim=1)
+    en_bert = torch.cat(en_bert_list, dim=1)
+    phones = torch.cat(phones_list, dim=0)
+    tones = torch.cat(tones_list, dim=0)
+    lang_ids = torch.cat(lang_ids_list, dim=0)
 
     return self._infer(
         id, phones, tones, lang_ids, zh_bert, ja_bert, en_bert,
@@ -663,6 +744,7 @@ def _get_clap(self: BertVITS2ONNX, reference_audio, text_prompt):
 
 # 挂载方法到类
 BertVITS2ONNX.infer = infer
+BertVITS2ONNX.infer_multilang = infer_multilang
 BertVITS2ONNX._infer = _infer
 BertVITS2ONNX._pytorch_synthesizer_fallback = _pytorch_synthesizer_fallback
 BertVITS2ONNX._get_emo = _get_emo

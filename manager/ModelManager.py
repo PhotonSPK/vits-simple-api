@@ -290,6 +290,39 @@ class ModelManager(Subject):
 
             model.load_model(self.model_handler)
 
+            # --- 尝试加载 ONNX 模型，存在则替换推理后端 ---
+            onnx_dir = os.path.dirname(vits_path)
+            syn_onnx_path = os.path.join(onnx_dir, "synthesizer.onnx")
+            if os.path.exists(syn_onnx_path):
+                try:
+                    from bert_vits2.bert_vits2_onnx import BertVITS2ONNX
+                    onnx_model = BertVITS2ONNX(
+                        vits_path, hps, self.model_handler, onnx_dir, str(self.device)
+                    )
+                    # Monkey-patch: 替换 _infer 为 ONNX 版本，保留 PyTorch 回落
+                    _original_infer = model._infer
+                    _original_infer_multilang = model.infer_multilang
+
+                    def _onnx_infer_wrapper(*args, **kwargs):
+                        try:
+                            return onnx_model._infer(*args, **kwargs)
+                        except Exception as e:
+                            self.logger.warning(f"ONNX 推理失败，回落 PyTorch: {e}")
+                            return _original_infer(*args, **kwargs)
+
+                    def _onnx_infer_multilang(*args, **kwargs):
+                        try:
+                            return onnx_model.infer_multilang(*args, **kwargs)
+                        except Exception as e:
+                            self.logger.warning(f"ONNX 多语言推理失败，回落 PyTorch: {e}")
+                            return _original_infer_multilang(*args, **kwargs)
+
+                    model._infer = _onnx_infer_wrapper
+                    model.infer_multilang = _onnx_infer_multilang
+                    self.logger.info(f"[ONNX] SynthesizerTrn 已启用: {syn_onnx_path}")
+                except Exception as e:
+                    self.logger.warning(f"[ONNX] 加载失败，使用 PyTorch: {e}")
+
             self.available_tts_model.add(ModelType.BERT_VITS2)
 
         elif model_type == ModelType.GPT_SOVITS:
