@@ -41,7 +41,7 @@ python_mecab_ko; sys_platform != 'win32'
 fugashi
 
 # Machine Learning and Deep Learning
-torch==2.7.1
+torch==2.8.0
 onnx==1.12.0
 onnxruntime-openvino
 audonnx==0.7.0
