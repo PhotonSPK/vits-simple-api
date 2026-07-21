@@ -469,25 +469,25 @@ def _onnx_synthesizer_infer(
 ) -> np.ndarray:
     """通过 ONNX Runtime 运行 SynthesizerTrn 推理"""
 
-    x = phones.numpy().astype(np.int64)
+    x = phones.unsqueeze(0).numpy().astype(np.int64)
     x_lengths = np.array([phones.size(0)], dtype=np.int64)
     sid_np = np.array([sid], dtype=np.int64)
-    tone_np = tones.numpy().astype(np.int64)
-    lang_np = lang_ids.numpy().astype(np.int64)
+    tone_np = tones.unsqueeze(0).numpy().astype(np.int64)
+    lang_np = lang_ids.unsqueeze(0).numpy().astype(np.int64)
 
-    # BERT 特征
+    # BERT 特征（加 batch 维）
     if self.zh_bert_extra:
-        zh_np = zh_bert.numpy().astype(np.float32)
+        zh_np = zh_bert.unsqueeze(0).numpy().astype(np.float32)
         ja_np = np.zeros((1, self.ja_bert_dim, zh_np.shape[2]), dtype=np.float32)
         en_np = np.zeros((1, 1024, zh_np.shape[2]), dtype=np.float32)
     elif self.ja_bert_extra:
-        ja_np = ja_bert.numpy().astype(np.float32)
+        ja_np = ja_bert.unsqueeze(0).numpy().astype(np.float32)
         zh_np = np.zeros((1, 1024, ja_np.shape[2]), dtype=np.float32)
         en_np = np.zeros((1, 1024, ja_np.shape[2]), dtype=np.float32)
     else:
-        zh_np = zh_bert.numpy().astype(np.float32)
-        ja_np = ja_bert.numpy().astype(np.float32)
-        en_np = en_bert.numpy().astype(np.float32)
+        zh_np = zh_bert.unsqueeze(0).numpy().astype(np.float32)
+        ja_np = ja_bert.unsqueeze(0).numpy().astype(np.float32)
+        en_np = en_bert.unsqueeze(0).numpy().astype(np.float32)
 
     # 标量参数
     feed = {
