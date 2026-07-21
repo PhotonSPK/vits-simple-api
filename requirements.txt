@@ -43,6 +43,7 @@ fugashi
 # Machine Learning and Deep Learning
 torch==2.7.1
 onnx==1.12.0
+onnxruntime-openvino
 audonnx==0.7.0
 vector_quantize_pytorch==1.12.12
 pytorch_lightning
