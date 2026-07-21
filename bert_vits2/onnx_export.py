@@ -54,8 +54,7 @@ logger = logging.getLogger(__name__)
 class SynthesizerTrnTracable(nn.Module):
     """
     将 SynthesizerTrn.infer() 包装为纯前向函数，
-    所有条件分支（speaker embedding / reference encoder）在外部处理，
-    以 g（speaker condition）作为输入。
+    speaker embedding (emb_g) 内置于模型中，以 sid 作为输入（不是 g）。
     """
 
     def __init__(self, synthesizer: nn.Module):
@@ -67,11 +66,18 @@ class SynthesizerTrnTracable(nn.Module):
         self.dp = synthesizer.dp
         self.n_speakers = synthesizer.n_speakers
 
+        # 将 emb_g 融入可追踪模型
+        if hasattr(synthesizer, "emb_g"):
+            self.emb_g = synthesizer.emb_g
+        else:
+            gin_channels = getattr(synthesizer, "gin_channels", 256)
+            self.emb_g = nn.Embedding(max(1, synthesizer.n_speakers), gin_channels)
+
     def forward(
         self,
         x,             # [1, t_x] int64 — phones
         x_lengths,     # [1] int64
-        g,             # [1, gin_channels, 1] — speaker condition
+        sid,           # [1] int64 — speaker id
         tone,          # [1, t_x] int64
         language,      # [1, t_x] int64
         zh_bert,       # [1, 1024, t_x] float32
@@ -83,10 +89,8 @@ class SynthesizerTrnTracable(nn.Module):
         sdp_ratio,     # float32 scalar
         emo=None,      # [1, emo_dim] float32, optional
     ):
-        # 文本编码
-        x_enc, m_p, logs_p, x_mask = self.enc_p(
-            x, x_lengths, tone, language, zh_bert, ja_bert, en_bert, emo=emo, sid=None, g=g
-        )
+        # Speaker embedding（内置于 ONNX 图）
+        g = self.emb_g(sid).unsqueeze(-1)  # [1, gin_channels, 1]
 
         # 时长预测（SDP + DP 混合）
         logw = (
@@ -183,7 +187,7 @@ def export_synthesizer(model_path: str, config_path: str, output_dir: str, opset
 
     dummy_x = torch.randint(0, len(symbols), (1, t_x), dtype=torch.long)
     dummy_x_lengths = torch.tensor([t_x], dtype=torch.long)
-    dummy_g = torch.randn(1, gin_channels, 1, dtype=torch.float32)
+    dummy_sid = torch.tensor([0], dtype=torch.long)
     dummy_tone = torch.randint(0, num_tones or 10, (1, t_x), dtype=torch.long)
     dummy_lang = torch.zeros(1, t_x, dtype=torch.long)
     dummy_zh_bert = torch.randn(1, 1024, t_x, dtype=torch.float32)
@@ -206,12 +210,12 @@ def export_synthesizer(model_path: str, config_path: str, output_dir: str, opset
     }
 
     input_names = [
-        "x", "x_lengths", "g", "tone", "language",
+        "x", "x_lengths", "sid", "tone", "language",
         "zh_bert", "ja_bert", "en_bert",
         "noise_scale", "length_scale", "noise_scale_w", "sdp_ratio",
     ]
     inputs = (
-        dummy_x, dummy_x_lengths, dummy_g, dummy_tone, dummy_lang,
+        dummy_x, dummy_x_lengths, dummy_sid, dummy_tone, dummy_lang,
         dummy_zh_bert, dummy_ja_bert, dummy_en_bert,
         dummy_noise, dummy_length, dummy_noisew, dummy_sdp,
     )
