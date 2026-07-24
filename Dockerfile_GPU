@@ -37,7 +37,7 @@ RUN wget https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VER
 RUN python -m ensurepip && \
     python -m pip install --upgrade pip && \
     ln -sf $(which pip) /usr/local/bin/pip3 && \
-    pip config set global.index-url https://mirrors.cernet.edu.cn/pypi/web/simple && \
+    pip config set global.index-url https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple && \
     pip install wheel
 
 ENV CFLAGS="-I/usr/local/include/python${PYTHON_MAJOR}.${PYTHON_MINOR}/"
