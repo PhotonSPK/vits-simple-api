@@ -1,4 +1,53 @@
-FROM artrajz/pytorch:2.2.1-cu118-py3.10.11-ubuntu22.04
+FROM nvidia/cuda:13.2.0-cudnn-runtime-ubuntu24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHON_VERSION=3.10.11
+ENV PYTHON_MAJOR=3
+ENV PYTHON_MINOR=10
+ENV PYTORCH_VERSION=2.13.0
+ENV PYTORCH_CUDA_CHANNEL=cu132
+ENV LANG C.UTF-8
+ENV LC_ALL C.UTF-8
+ENV PATH /usr/local/bin:$PATH
+
+RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    apt-get install --no-install-recommends -y \
+    wget \
+    build-essential \
+    libssl-dev \
+    zlib1g-dev \
+    libreadline-dev \
+    libsqlite3-dev \
+    libexpat1-dev \
+    liblzma-dev \
+    libffi-dev \
+    libbz2-dev && \
+    apt-get autoremove -y && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN wget https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz && \
+    tar xzf Python-${PYTHON_VERSION}.tgz && \
+    cd Python-${PYTHON_VERSION} && \
+    ./configure --enable-optimizations && \
+    make -j$(nproc) altinstall && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/local/bin/python${PYTHON_MAJOR}.${PYTHON_MINOR} 1 && \
+    update-alternatives --install /usr/bin/python python /usr/local/bin/python${PYTHON_MAJOR}.${PYTHON_MINOR} 1 && \
+    rm -rf /Python-${PYTHON_VERSION}.tgz /Python-${PYTHON_VERSION}
+
+RUN python -m ensurepip && \
+    python -m pip install --upgrade pip && \
+    ln -sf $(which pip) /usr/local/bin/pip3 && \
+    pip config set global.index-url https://mirrors.cernet.edu.cn/pypi/web/simple && \
+    pip install wheel
+
+ENV CFLAGS="-I/usr/local/include/python${PYTHON_MAJOR}.${PYTHON_MINOR}/"
+
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        pip install --no-cache-dir torch==${PYTORCH_VERSION} --index-url https://download.pytorch.org/whl/${PYTORCH_CUDA_CHANNEL}; \
+    else \
+        echo "Unsupported architecture for CUDA ${PYTORCH_CUDA_CHANNEL}: $ARCH"; exit 1; \
+    fi
 
 RUN mkdir -p /app
 WORKDIR /app
@@ -7,25 +56,62 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 
 RUN apt-get update && \
-    apt-get install -yq build-essential espeak-ng cmake wget ca-certificates tzdata&& \
+    apt-get install -yq \
+    build-essential \
+    cmake \
+    wget \
+    ca-certificates \
+    tzdata \
+    autoconf \
+    automake \
+    libtool \
+    pkg-config \
+    gettext && \
     update-ca-certificates && \
     apt-get clean && \
     apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false && \
-    rm -rf /var/lib/apt/lists/* 
+    rm -rf /var/lib/apt/lists/*
 
+ENV ESPEAK_NG_VERSION=1.52.0
 
-# Install jemalloc
-RUN wget https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2 && \
-    tar -xvf jemalloc-5.3.0.tar.bz2 && \
-    cd jemalloc-5.3.0 && \
-    ./configure && \
+# Build and install espeak-ng from source.
+RUN wget -O /tmp/espeak-ng.tar.gz https://github.com/espeak-ng/espeak-ng/archive/refs/tags/${ESPEAK_NG_VERSION}.tar.gz && \
+    tar -xzf /tmp/espeak-ng.tar.gz -C /tmp && \
+    cd /tmp/espeak-ng-${ESPEAK_NG_VERSION} && \
+    ./autogen.sh && \
+    ./configure --prefix=/usr/local && \
     make -j$(nproc) && \
     make install && \
-    cd .. && \
-    rm -rf jemalloc-5.3.0* && \
-    ldconfig
+    ldconfig && \
+    rm -rf /tmp/espeak-ng.tar.gz /tmp/espeak-ng-${ESPEAK_NG_VERSION}
 
-ENV LD_PRELOAD=/usr/local/lib/libjemalloc.so
+
+# Link espeak-ng to a fixed path for runtime library detection.
+RUN ESPEAK_PATH=$(ldconfig -p | awk '/libespeak-ng.so.1/{print $NF; exit}') && \
+    test -n "$ESPEAK_PATH" && \
+    ln -sf "$ESPEAK_PATH" /usr/local/lib/libespeak-ng.so.1 && \
+    ln -sf "$ESPEAK_PATH" /usr/local/lib/libespeak-ng.so
+
+
+ENV MIMALLOC_VERSION=2.1.7
+
+# Build and install mimalloc from source.
+RUN wget -O /tmp/mimalloc.tar.gz https://github.com/microsoft/mimalloc/archive/refs/tags/v${MIMALLOC_VERSION}.tar.gz && \
+    tar -xzf /tmp/mimalloc.tar.gz -C /tmp && \
+    cd /tmp/mimalloc-${MIMALLOC_VERSION} && \
+    cmake -S . -B build -DMI_BUILD_SHARED=ON -DMI_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build build -j$(nproc) && \
+    cmake --install build && \
+    ldconfig && \
+    rm -rf /tmp/mimalloc.tar.gz /tmp/mimalloc-${MIMALLOC_VERSION}
+
+
+# Link mimalloc to a fixed path for LD_PRELOAD across architectures.
+RUN MIMALLOC_PATH=$(ldconfig -p | awk '/libmimalloc.so.2/{print $NF; exit}') && \
+    test -n "$MIMALLOC_PATH" && \
+    ln -sf "$MIMALLOC_PATH" /usr/local/lib/libmimalloc.so
+
+ENV LD_PRELOAD=/usr/local/lib/libmimalloc.so
 
 COPY requirements.txt /app/
 RUN pip install gunicorn --no-cache-dir && \
