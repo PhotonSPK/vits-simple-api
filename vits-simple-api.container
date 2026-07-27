@@ -1,0 +1,24 @@
+[Unit]
+Description=VITS-simple-api container
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+ContainerName=vits-simple-api
+Image=localhost/vits-simple-api:cpu-2.13.0
+Environment=LANG=C.UTF-8
+Environment=TZ=Asia/Shanghai
+Exec=python app.py
+Volume=/home/akula/.local/vits-simple-api/data:/app/data:Z
+Volume=/home/akula/.local/vits-simple-api/config.yaml:/app/config.yaml:Z
+Volume=/home/akula/.local/vits-simple-api/logs:/app/logs:Z
+Volume=/home/akula/.local/vits-simple-api/gunicorn_config.py:/app/gunicorn_config.py:Z
+Volume=/home/akula/.local/vits-simple-api/pyopenjtalk/open_jtalk_dic_utf_8-1.11:/usr/local/lib/python3.10/site-packages/pyopenjtalk/open_jtalk_dic_utf_8-1.11:Z
+Volume=/home/akula/.local/vits-simple-api/nltk_data:/usr/local/share/nltk_data:Z
+Network=podman-dual-stack
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
